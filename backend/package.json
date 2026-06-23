@@ -1,14 +1,21 @@
 {
-  "name": "ant-design-x-conversation-fullstack",
+  "name": "ant-design-x-conversation-backend",
   "private": true,
+  "version": "1.0.0",
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply ant-design-x-conversation --local",
     "db:migrate:remote": "wrangler d1 migrations apply ant-design-x-conversation --remote",
-    "typecheck": "npm run typecheck --prefix worker"
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.7.4"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250317.0",
+    "typescript": "^5.8.2",
     "wrangler": "^4.0.0"
   }
 }
