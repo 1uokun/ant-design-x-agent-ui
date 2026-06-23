@@ -108,7 +108,7 @@ export type ChatMessage = {
   feedbackType?: string;
 };
 
-export type ChatRequestInput = TurnIds & {
+export type ChatRequestInput = ChatRoundMeta & {
   messages?: ChatMessage[];
   userAction?: "send" | "retry";
 };
@@ -148,3 +148,127 @@ export type FeedbackPayload = {
 export type UploadResult = {
   url: string;
 };
+
+/** 一轮对话 ID（不含 sessionId） */
+export type ChatRoundMeta = Omit<TurnIds, "sessionId">;
+
+export function createChatRoundMeta(modelName = "deepseek-chat"): ChatRoundMeta {
+  return {
+    messageId: crypto.randomUUID(),
+    requestId: crypto.randomUUID(),
+    responseId: crypto.randomUUID(),
+    modelName,
+  };
+}
+
+export function toChatRequestMessages(
+  content: string | MessageContent,
+): ContentItem[] {
+  if (typeof content === "string") {
+    return [{ type: "text/plain", text: content }];
+  }
+
+  const messages: ContentItem[] = [];
+  if (content.text) {
+    messages.push({ type: "text/plain", text: content.text });
+  }
+  for (const url of content.imageUrls || []) {
+    messages.push({ type: "image/jpeg", text: url });
+  }
+  return messages;
+}
+
+export function buildChatRequestParams(
+  content: string | MessageContent,
+  roundMeta: ChatRoundMeta,
+): ChatRequestInput {
+  return {
+    ...roundMeta,
+    messages: [{ role: "user", content, ...roundMeta }],
+  };
+}
+
+const API_BASE = "/api/v1";
+
+async function requestJson<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<ApiResponse<T>> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json", ...init?.headers },
+    ...init,
+  });
+  return res.json() as Promise<ApiResponse<T>>;
+}
+
+/** 会话列表 */
+export async function fetchSessionList(userId: number) {
+  const res = await requestJson<PageList<Session>>(
+    `/session/page/list?userId=${encodeURIComponent(String(userId))}`,
+  );
+  if (!res.success || !res.data) {
+    throw new Error(res.message ?? "fetchSessionList failed");
+  }
+  return res.data.list;
+}
+
+/** 更新会话 */
+export async function updateSession(sessionId: string, payload: SessionUpdatePayload) {
+  const res = await requestJson<boolean>("/session/update", {
+    method: "POST",
+    body: JSON.stringify({ sessionId, ...payload }),
+  });
+  if (!res.success) throw new Error(res.message ?? "updateSession failed");
+  return res.data;
+}
+
+/** 删除会话 */
+export async function deleteSession(sessionId: string) {
+  const res = await requestJson<boolean>("/session/delete", {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
+  });
+  if (!res.success) throw new Error(res.message ?? "deleteSession failed");
+  return res.data;
+}
+
+/** 消息轮次列表 */
+export async function fetchMessageList(sessionId: string) {
+  const res = await requestJson<PageList<MessageTurn>>(
+    `/session/msg/list?sessionId=${encodeURIComponent(sessionId)}`,
+  );
+  if (!res.success || !res.data) {
+    throw new Error(res.message ?? "fetchMessageList failed");
+  }
+  return res.data.list;
+}
+
+/** 删除一轮对话 */
+export async function deleteMessage(messageId: string) {
+  const res = await requestJson<boolean>("/session/msg/delete", {
+    method: "POST",
+    body: JSON.stringify({ messageId }),
+  });
+  if (!res.success) throw new Error(res.message ?? "deleteMessage failed");
+  return res.data;
+}
+
+/** 消息反馈 */
+export async function submitFeedback(payload: FeedbackPayload) {
+  const res = await requestJson<boolean>("/session/msg/feedback", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!res.success) throw new Error(res.message ?? "submitFeedback failed");
+  return res.data;
+}
+
+/** 停止流式生成（需在 useXChat.abort() 之前调用） */
+export async function abortChat(payload: AbortPayload) {
+  const res = await requestJson<boolean>("/chat/abort", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  if (!res.success) throw new Error(res.message ?? "abortChat failed");
+  return res.data;
+}

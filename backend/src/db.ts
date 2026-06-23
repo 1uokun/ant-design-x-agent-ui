@@ -1,6 +1,7 @@
-import { SourceType } from "./constants";
+import { SourceType, EventType } from "./constants";
 import {
   feedbackToApi,
+  hasNonBlankContent,
   normalizeContentItems,
   parseContent,
   serializeContent,
@@ -414,4 +415,41 @@ export async function buildChatHistory(
   }
 
   return history;
+}
+
+/** 对齐 Java KnowledgeChatMessageService.persistV1ChatResponse */
+export async function persistV1ChatResponse(
+  db: D1Database,
+  params: {
+    messageId: string;
+    responseId: string;
+  },
+  eventType: number,
+  text: string,
+): Promise<void> {
+  const message = await getMessageByMessageId(db, params.messageId);
+  if (!message || message.eventType !== EventType.STREAMING) return;
+
+  const now = nowIso();
+  const hasText = Boolean(text?.trim());
+
+  if (hasText) {
+    const existing = await db
+      .prepare(
+        "SELECT content FROM agent_content WHERE sourceType = ? AND sourceId = ?",
+      )
+      .bind(SourceType.ASSISTANT, params.responseId)
+      .first<{ content: string | null }>();
+
+    if (existing && hasNonBlankContent(existing.content)) {
+      await updateMessageFinalize(db, params.messageId, eventType, now);
+      return;
+    }
+
+    await upsertAgentContent(db, SourceType.ASSISTANT, params.responseId, [
+      { type: "text/plain", text },
+    ]);
+  }
+
+  await updateMessageFinalize(db, params.messageId, eventType, now);
 }

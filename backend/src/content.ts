@@ -38,3 +38,7 @@ export function feedbackToApi(value: number): "good" | "bad" | null {
 export function feedbackFromApi(value: "good" | "bad"): number {
   return value === "good" ? 1 : 2;
 }
+
+export function hasNonBlankContent(raw: string | null | undefined): boolean {
+  return parseContent(raw).some((item) => Boolean(item.text?.trim()));
+}

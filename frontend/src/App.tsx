@@ -30,24 +30,14 @@ import {
 } from '@ant-design/x';
 import type { ComponentProps } from '@ant-design/x-markdown';
 import XMarkdown from '@ant-design/x-markdown';
-import type { DefaultMessageInfo } from '@ant-design/x-sdk';
-import {
-  DeepSeekChatProvider,
-  SSEFields,
-  useXChat,
-  useXConversations,
-  XModelMessage,
-  XModelParams,
-  XModelResponse,
-  XRequest,
-} from '@ant-design/x-sdk';
-import { Avatar, Button, Flex, type GetProp, message, Pagination, Space } from 'antd';
+import { useXChat } from '@ant-design/x-sdk';
+import { Avatar, Button, Flex, Input, Modal, type GetProp, message, Pagination, Space } from 'antd';
 import { createStyles } from 'antd-style';
-import dayjs from 'dayjs';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import '@ant-design/x-markdown/themes/light.css';
 import '@ant-design/x-markdown/themes/dark.css';
 import { BubbleListRef } from '@ant-design/x/es/bubble';
+import { useConversationChat, type AppChatMessage } from './hooks/useConversationChat';
 import { useMarkdownTheme } from "./x-markdown/demo/_utils";
 import locale from "./_utils/local";
 
@@ -161,52 +151,6 @@ const useStyle = createStyles(({ token, css }) => {
 });
 
 // ==================== Static Config ====================
-const HISTORY_MESSAGES: {
-  [key: string]: DefaultMessageInfo<ChatMessage>[];
-} = {
-  'default-1': [
-    {
-      message: { role: 'user', content: locale.howToQuicklyInstallAndImportComponents },
-      status: 'success',
-    },
-    {
-      message: {
-        role: 'assistant',
-        content: locale.aiMessage_2,
-      },
-      status: 'success',
-    },
-  ],
-  'default-2': [
-    { message: { role: 'user', content: locale.newAgiHybridInterface }, status: 'success' },
-    {
-      message: {
-        role: 'assistant',
-        content: locale.aiMessage_1,
-      },
-      status: 'success',
-    },
-  ],
-};
-
-const DEFAULT_CONVERSATIONS_ITEMS = [
-  {
-    key: 'default-0',
-    label: locale.whatIsAntDesignX,
-    group: locale.today,
-  },
-  {
-    key: 'default-1',
-    label: locale.howToQuicklyInstallAndImportComponents,
-    group: locale.today,
-  },
-  {
-    key: 'default-2',
-    label: locale.newAgiHybridInterface,
-    group: locale.yesterday,
-  },
-];
-
 const HOT_TOPICS = {
   key: '1',
   label: locale.hotTopics,
@@ -316,17 +260,12 @@ const THOUGHT_CHAIN_CONFIG = {
   },
 };
 
-// ==================== Type ====================
-interface ChatMessage extends XModelMessage {
-  extraInfo?: {
-    feedback: ActionsFeedbackProps['value'];
-  };
-}
-
 // ==================== Context ====================
 const ChatContext = React.createContext<{
   onReload?: ReturnType<typeof useXChat>['onReload'];
-  setMessage?: ReturnType<typeof useXChat<ChatMessage>>['setMessage'];
+  setMessage?: ReturnType<typeof useXChat<AppChatMessage>>['setMessage'];
+  sessionId?: string;
+  onFeedback?: (messageId: string, feedbackType: 'good' | 'bad') => void;
 }>({});
 
 // ==================== Sub Component ====================
@@ -353,7 +292,7 @@ const Footer: React.FC<{
   id?: string | number;
   content: string;
   status?: string;
-  extraInfo?: ChatMessage['extraInfo'];
+  extraInfo?: AppChatMessage['extraInfo'];
 }> = ({ id, content, extraInfo, status }) => {
   const context = React.useContext(ChatContext);
   const Items = [
@@ -399,15 +338,14 @@ const Footer: React.FC<{
           value={extraInfo?.feedback || 'default'}
           key="feedback"
           onChange={(val) => {
-            if (id) {
+            if (id && val !== 'default') {
+              const messageId = String(id).replace(/-request$/, '');
               context?.setMessage?.(id, () => ({
-                extraInfo: {
-                  feedback: val,
-                },
+                extraInfo: { feedback: val },
               }));
-              message.success(`${id}: ${val}`);
-            } else {
-              message.error('has no id!');
+              if (val === 'like' || val === 'dislike') {
+                context?.onFeedback?.(messageId, val === 'like' ? 'good' : 'bad');
+              }
             }
           }}
         />
@@ -417,39 +355,6 @@ const Footer: React.FC<{
   return status !== 'updating' && status !== 'loading' ? (
     <div style={{ display: 'flex' }}>{id && <Actions items={Items} />}</div>
   ) : null;
-};
-
-// ==================== Chat Provider ====================
-/**
- * 🔔 Please replace the BASE_URL, MODEL with your own values.
- */
-const providerCaches = new Map<string, DeepSeekChatProvider>();
-const providerFactory = (conversationKey: string) => {
-  if (!providerCaches.get(conversationKey)) {
-    providerCaches.set(
-      conversationKey,
-      new DeepSeekChatProvider({
-        request: XRequest<XModelParams, Partial<Record<SSEFields, XModelResponse>>>(
-          'https://api.x.ant.design/api/big_model_glm-4.5-flash',
-          {
-            manual: true,
-            params: {
-              stream: true,
-              thinking: {
-                type: 'disabled',
-              },
-              model: 'glm-4.5-flash',
-            },
-          },
-        ),
-      }),
-    );
-  }
-  return providerCaches.get(conversationKey);
-};
-
-const historyMessageFactory = (conversationKey: string): DefaultMessageInfo<ChatMessage>[] => {
-  return HISTORY_MESSAGES[conversationKey] || [];
 };
 
 const getRole = (className: string): BubbleListProps['role'] => ({
@@ -473,7 +378,7 @@ const getRole = (className: string): BubbleListProps['role'] => ({
       <Footer
         content={content}
         status={status}
-        extraInfo={extraInfo as ChatMessage['extraInfo']}
+        extraInfo={extraInfo as AppChatMessage['extraInfo']}
         id={key as string}
       />
     ),
@@ -501,65 +406,74 @@ const getRole = (className: string): BubbleListProps['role'] => ({
 
 const Independent: React.FC = () => {
   const { styles } = useStyle();
-  // ==================== State ====================
+  const [className] = useMarkdownTheme();
+  const [messageApi, contextHolder] = message.useMessage();
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<GetProp<typeof Attachments, 'items'>>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameKey, setRenameKey] = useState('');
+  const [renameValue, setRenameValue] = useState('');
+  const [renameLoading, setRenameLoading] = useState(false);
+
+  const listRef = useRef<BubbleListRef>(null);
 
   const {
     conversations,
     activeConversationKey,
     setActiveConversationKey,
-    addConversation,
-    setConversations,
-  } = useXConversations({
-    defaultConversations: DEFAULT_CONVERSATIONS_ITEMS,
-    defaultActiveConversationKey: DEFAULT_CONVERSATIONS_ITEMS[0].key,
-  });
+    messages,
+    isRequesting,
+    isDefaultMessagesRequesting,
+    onReload,
+    setMessage,
+    onSubmit: submitChat,
+    handleAbort,
+    handleFeedback,
+    handleCreateConversation,
+    handleDeleteConversation,
+    handleRenameConversation,
+  } = useConversationChat({ messageApi });
 
-  const [className] = useMarkdownTheme();
-  const [messageApi, contextHolder] = message.useMessage();
-  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
-  const [attachedFiles, setAttachedFiles] = useState<GetProp<typeof Attachments, 'items'>>([]);
+  useEffect(() => {
+    if (!activeConversationKey) {
+      setInputValue('');
+    }
+  }, [activeConversationKey]);
 
-  const [inputValue, setInputValue] = useState('');
-
-  const listRef = useRef<BubbleListRef>(null);
-
-  // ==================== Runtime ====================
-
-  const { onRequest, messages, isRequesting, abort, onReload, setMessage } = useXChat<ChatMessage>({
-    provider: providerFactory(activeConversationKey), // every conversation has its own provider
-    conversationKey: activeConversationKey,
-    defaultMessages: historyMessageFactory(activeConversationKey),
-    requestPlaceholder: () => {
-      return {
-        content: locale.noData,
-        role: 'assistant',
-      };
-    },
-    requestFallback: (_, { error, errorInfo, messageInfo }) => {
-      if (error.name === 'AbortError') {
-        return {
-          content: messageInfo?.message?.content || locale.requestAborted,
-          role: 'assistant',
-        };
-      }
-      return {
-        content: errorInfo?.error?.message || locale.requestFailed,
-        role: 'assistant',
-      };
-    },
-  });
-
-  // ==================== Event ====================
   const onSubmit = (val: string) => {
-    if (!val) return;
-    onRequest({
-      messages: [{ role: 'user', content: val }],
-    });
+    submitChat(val);
+    setInputValue('');
     listRef.current?.scrollTo({ top: 'bottom' });
-    setActiveConversationKey(activeConversationKey);
   };
 
-  // ==================== Nodes ====================
+  const handleOpenRename = (key: string, title?: string) => {
+    setRenameKey(key);
+    setRenameValue(String(title || '').replace(`[${locale.curConversation}]`, ''));
+    setRenameOpen(true);
+  };
+
+  const handleConfirmRename = async () => {
+    setRenameLoading(true);
+    try {
+      const ok = await handleRenameConversation(renameKey, renameValue);
+      if (ok) setRenameOpen(false);
+    } finally {
+      setRenameLoading(false);
+    }
+  };
+
+  const confirmDeleteConversation = (key: string) => {
+    Modal.confirm({
+      title: locale.delete,
+      okText: '确定',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: () => handleDeleteConversation(key),
+    });
+  };
+
+  // ==================== Event ====================
   const chatSide = (
     <div className={styles.side}>
       {/* 🌟 Logo */}
@@ -576,19 +490,7 @@ const Independent: React.FC = () => {
       {/* 🌟 会话管理 */}
       <Conversations
         creation={{
-          onClick: () => {
-            if (messages.length === 0) {
-              messageApi.error(locale.itIsNowANewConversation);
-              return;
-            }
-            const now = dayjs().valueOf().toString();
-            addConversation({
-              key: now,
-              label: `${locale.newConversation} ${conversations.length + 1}`,
-              group: locale.today,
-            });
-            setActiveConversationKey(now);
-          },
+          onClick: handleCreateConversation,
         }}
         items={conversations.map(({ key, label, ...other }) => ({
           key,
@@ -606,20 +508,14 @@ const Independent: React.FC = () => {
               label: locale.rename,
               key: 'rename',
               icon: <EditOutlined />,
+              onClick: () => handleOpenRename(conversation.key, String(conversation.label ?? '')),
             },
             {
               label: locale.delete,
               key: 'delete',
               icon: <DeleteOutlined />,
               danger: true,
-              onClick: () => {
-                const newList = conversations.filter((item) => item.key !== conversation.key);
-                const newKey = newList?.[0]?.key;
-                setConversations(newList);
-                if (conversation.key === activeConversationKey) {
-                  setActiveConversationKey(newKey);
-                }
-              },
+              onClick: () => confirmDeleteConversation(conversation.key),
             },
           ],
         })}
@@ -634,7 +530,11 @@ const Independent: React.FC = () => {
 
   const chatList = (
     <div className={styles.chatList}>
-      {messages?.length ? (
+      {isDefaultMessagesRequesting ? (
+        <Flex align="center" justify="center" style={{ flex: 1 }}>
+          <span>{locale.noData}</span>
+        </Flex>
+      ) : messages?.length ? (
         /* 🌟 消息列表 */
         <Bubble.List
           ref={listRef}
@@ -777,9 +677,7 @@ const Independent: React.FC = () => {
           setInputValue('');
         }}
         onChange={setInputValue}
-        onCancel={() => {
-          abort();
-        }}
+        onCancel={handleAbort}
         prefix={
           <Button
             type="text"
@@ -798,7 +696,7 @@ const Independent: React.FC = () => {
   // ==================== Render =================
 
   return (
-    <ChatContext.Provider value={{ onReload, setMessage }}>
+    <ChatContext.Provider value={{ onReload, setMessage, sessionId: activeConversationKey, onFeedback: handleFeedback }}>
       {contextHolder}
       <div className={styles.layout}>
         {chatSide}
@@ -807,6 +705,27 @@ const Independent: React.FC = () => {
           {chatSender}
         </div>
       </div>
+      <Modal
+        title={locale.rename}
+        open={renameOpen}
+        okText="确定"
+        cancelText="取消"
+        confirmLoading={renameLoading}
+        onOk={handleConfirmRename}
+        onCancel={() => setRenameOpen(false)}
+        destroyOnHidden
+      >
+        <Input
+          autoFocus
+          value={renameValue}
+          maxLength={15}
+          placeholder={locale.rename}
+          onChange={(e) => setRenameValue(e.target.value)}
+          onPressEnter={() => {
+            if (!renameLoading) handleConfirmRename();
+          }}
+        />
+      </Modal>
     </ChatContext.Provider>
   );
 };
