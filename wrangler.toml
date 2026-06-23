@@ -1,0 +1,21 @@
+name = "ant-design-x-conversation"
+main = "worker/src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# 默认模型，可在 Cloudflare Dashboard 或 .dev.vars 覆盖
+DEFAULT_MODEL = "deepseek-chat"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ant-design-x-conversation"
+database_id = "local-dev-placeholder"
+migrations_dir = "db/migrations"
+
+[[kv_namespaces]]
+binding = "STREAM_KV"
+id = "local-dev-placeholder"
+
+[dev]
+port = 8787

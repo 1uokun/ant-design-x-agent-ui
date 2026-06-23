@@ -1,0 +1,14 @@
+{
+  "name": "ant-design-x-conversation-fullstack",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply ant-design-x-conversation --local",
+    "db:migrate:remote": "wrangler d1 migrations apply ant-design-x-conversation --remote",
+    "typecheck": "npm run typecheck --prefix worker"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,0 +1,6 @@
+# OpenAI 兼容 API（流式对话）
+OPENAI_API_KEY=sk-your-key
+OPENAI_BASE_URL=https://api.deepseek.com/v1
+
+# 默认模型（可在 wrangler.toml [vars] 覆盖）
+DEFAULT_MODEL=deepseek-chat
