@@ -3,7 +3,7 @@ import type { BubbleListProps, ThoughtChainItemProps } from "@ant-design/x";
 import { Actions, Think, ThoughtChain } from "@ant-design/x";
 import type { ComponentProps } from "@ant-design/x-markdown";
 import XMarkdown from "@ant-design/x-markdown";
-import { message, Pagination } from "antd";
+import { Pagination } from "antd";
 import React from "react";
 import locale from "../_utils/local";
 import type { AppChatMessage } from "../hooks/useConversationChat";
@@ -59,34 +59,8 @@ const Footer: React.FC<{
   const context = React.useContext(ChatContext);
   const Items = [
     {
-      key: "pagination",
-      actionRender: <Pagination simple total={1} pageSize={1} />,
-    },
-    {
-      key: "retry",
-      label: locale.retry,
-      icon: <SyncOutlined />,
-      onItemClick: () => {
-        if (id) {
-          context?.onReload?.(id, {
-            userAction: "retry",
-          });
-        }
-      },
-    },
-    {
       key: "copy",
       actionRender: <Actions.Copy text={content} />,
-    },
-    {
-      key: "audio",
-      actionRender: (
-        <Actions.Audio
-          onClick={() => {
-            message.info(locale.isMock);
-          }}
-        />
-      ),
     },
     {
       key: "feedback",
@@ -114,6 +88,25 @@ const Footer: React.FC<{
             }
           }}
         />
+      ),
+    },
+
+    {
+      key: "retry",
+      label: locale.retry,
+      icon: <SyncOutlined />,
+      onItemClick: () => {
+        if (id) {
+          context?.onReload?.(id, {
+            userAction: "retry",
+          });
+        }
+      },
+    },
+    {
+      key: "pagination",
+      actionRender: (
+        <Pagination simple={{ readOnly: true }} total={1} pageSize={1} />
       ),
     },
   ];
