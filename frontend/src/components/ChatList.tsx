@@ -10,8 +10,9 @@ import type { AppChatMessage } from "../hooks/useConversationChat";
 import { getAssistantRole } from "./BubbleAssistant";
 import {
   createUserRole,
+  findLastUserMessageKey,
   getEditableText,
-  getLastUserMessageKey,
+  isLastRoundComplete,
 } from "./BubbleUser";
 import ChatWelcome from "./Welcome";
 
@@ -74,15 +75,23 @@ const ChatList: React.FC<ChatListProps> = ({
 
   const lastMessageKey = useMemo(() => messages?.at(-1)?.id ?? null, [messages]);
   const lastUserMessageKey = useMemo(
-    () => getLastUserMessageKey(messages?.at(-1)),
+    () => findLastUserMessageKey(messages),
+    [messages],
+  );
+  const lastRoundComplete = useMemo(
+    () => isLastRoundComplete(messages),
     [messages],
   );
 
   const role: BubbleListProps["role"] = useMemo(
     () => ({
-      assistant: getAssistantRole(className, { lastMessageKey }),
+      assistant: getAssistantRole(className, {
+        lastMessageKey,
+        isLastRoundComplete: lastRoundComplete,
+      }),
       user: createUserRole({
         lastUserMessageKey,
+        isLastRoundComplete: lastRoundComplete,
         onEditUserMessage,
         onCancelUserMessageEdit,
       }),
@@ -91,6 +100,7 @@ const ChatList: React.FC<ChatListProps> = ({
       className,
       lastMessageKey,
       lastUserMessageKey,
+      lastRoundComplete,
       onEditUserMessage,
       onCancelUserMessageEdit,
     ],

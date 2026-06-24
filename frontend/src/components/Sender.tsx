@@ -23,6 +23,15 @@ const useStyle = createStyles(({ token, css }) => ({
     margin: 0 auto;
     color: ${token.colorText};
   `,
+  disclaimer: css`
+    width: 100%;
+    max-width: 840px;
+    margin: 0 auto;
+    text-align: center;
+    font-size: 10px;
+    line-height: 20px;
+    color: ${token.colorTextTertiary};
+  `,
 }));
 
 const SENDER_PROMPTS: GetProp<typeof Prompts, 'items'> = [
@@ -135,6 +144,7 @@ const ChatSender: React.FC<ChatSenderProps> = ({
         allowSpeech
         placeholder={locale.askOrInputUseSkills}
       />
+      <div className={styles.disclaimer}>{locale.aiContentDisclaimer}</div>
     </Flex>
   );
 };

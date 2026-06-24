@@ -1,12 +1,14 @@
-# ant-design-x-session-fullstack
-
 <img src="./assets/overview.png" width="100%"/>
 
-> 基于 Ant Design X 的全栈会话示例，演示如何用 MySQL 设计并实现会话管理、消息持久化与流式对话。
+# ant-design-x-session-fullstack
 
-A full-stack reference for session & message management with [Ant Design X](https://x.ant.design/) and MySQL — covering session design, message persistence, streaming responses, and production-ready data modeling.
+基于 [Ant Design X](https://x.ant.design/) 的全栈会话示例，演示如何用 MySQL 设计并实现会话管理、消息持久化与流式对话。
 
-> **AI 代码生成**：可直接复制 `[PROMPT.md](./PROMPT.md)` 中的提示词给 AI，用于生成完整全栈项目。
+**AI 代码生成**：可直接复制 [PROMPT.md](./PROMPT.md) 中的提示词给 AI，用于生成完整全栈项目。
+
+**如何运行本项目**： [DEVELOPMENT.md](./DEVELOPMENT.md)。
+
+理论上，只要你掌握了大的框架，后面堆叠功能基本靠vibe coding就可以了。
 
 ---
 

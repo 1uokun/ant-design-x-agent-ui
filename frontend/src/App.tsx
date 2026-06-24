@@ -18,7 +18,19 @@ const useStyle = createStyles(({ token, css }) => ({
     height: 100vh;
     display: flex;
     background: ${token.colorBgContainer};
-    font-family: AlibabaPuHuiTi, ${token.fontFamily}, sans-serif;
+    font-family:
+      "PingFang SC",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Hiragino Sans GB",
+      "Hiragino Sans",
+      "SF Pro Text",
+      system-ui,
+      "Noto Sans SC",
+      "Helvetica Neue",
+      Helvetica,
+      Arial,
+      sans-serif;
   `,
   chat: css`
     height: 100%;

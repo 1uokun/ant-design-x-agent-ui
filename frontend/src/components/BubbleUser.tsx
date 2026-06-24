@@ -34,13 +34,33 @@ export const getEditableText = (content: UserContent): string =>
 const hasUserImages = (content: UserContent): boolean =>
   typeof content !== "string" && Boolean(content.imageUrls?.length);
 
-export const getLastUserMessageKey = (
-  lastItem: { id?: string | number; message: AppChatMessage } | undefined,
+type ChatMessageListItem = {
+  id?: string | number;
+  status?: string;
+  message: AppChatMessage;
+};
+
+/** 从消息列表中找到最后一条用户消息的 bubble id（兼容 msg_* 与 *-request） */
+export const findLastUserMessageKey = (
+  messages: ChatMessageListItem[] | undefined,
 ): string | number | null => {
-  if (lastItem?.id == null) return null;
-  if (lastItem.message.role === "user") return lastItem.id;
-  if (lastItem.message.role === "assistant") return `${lastItem.id}-request`;
+  if (!messages?.length) return null;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const item = messages[i];
+    if (item.message.role === "user" && item.id != null) {
+      return item.id;
+    }
+  }
   return null;
+};
+
+/** 最后一轮助手回复已结束（非 loading / updating） */
+export const isLastRoundComplete = (
+  messages: ChatMessageListItem[] | undefined,
+): boolean => {
+  const last = messages?.at(-1);
+  if (!last || last.message.role !== "assistant") return false;
+  return last.status !== "loading" && last.status !== "updating";
 };
 
 export const isLastUserMessage = (
@@ -242,6 +262,7 @@ const UserBubbleContent: React.FC<{
 
 export type CreateUserRoleOptions = {
   lastUserMessageKey: string | number | null;
+  isLastRoundComplete: boolean;
   onEditUserMessage?: (messageKey: string | number, content: string) => void;
   onCancelUserMessageEdit?: (messageKey: string | number) => void;
 };
@@ -251,6 +272,7 @@ export const createUserRole = (
 ): FuncRoleProps => {
   return (data: BubbleItemType) => {
     const editableSupported =
+      options.isLastRoundComplete &&
       !hasUserImages(data.content as UserContent) &&
       isLastUserMessage(data.key, options.lastUserMessageKey);
 

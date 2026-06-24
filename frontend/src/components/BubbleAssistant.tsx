@@ -137,7 +137,10 @@ const Footer: React.FC<{
 
 export const getAssistantRole = (
   className: string,
-  options?: { lastMessageKey?: string | number | null },
+  options?: {
+    lastMessageKey?: string | number | null;
+    isLastRoundComplete?: boolean;
+  },
 ): NonNullable<BubbleListProps["role"]>["assistant"] => ({
   placement: "start",
   variant: "borderless",
@@ -177,7 +180,9 @@ export const getAssistantRole = (
       status={status}
       extraInfo={extraInfo as AppChatMessage["extraInfo"]}
       id={key as string}
-      retrySupported={key === options?.lastMessageKey}
+      retrySupported={
+        key === options?.lastMessageKey && Boolean(options?.isLastRoundComplete)
+      }
     />
   ),
   contentRender: (content: string, { status }) => {
