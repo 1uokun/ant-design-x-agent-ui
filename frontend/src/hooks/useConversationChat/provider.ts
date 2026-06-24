@@ -1,18 +1,40 @@
 import {
   DeepSeekChatProvider,
+  XRequest,
+  type SSEFields,
   type TransformMessage,
   type XModelMessage,
   type XRequestOptions,
 } from "@ant-design/x-sdk";
-import type { ChatMessage, ChatRequestBody, ChatRoundMeta } from "../api/message";
-import { toChatRequestMessages } from "../api/message";
-import { DEFAULT_MODEL, DEFAULT_USER_ID } from "./constants";
-import { getChatXRequest, type ChatProviderInput, type ChatStreamOutput } from "./x-request";
-import { generateMessageId } from "../utils/id";
+import { CHAT_API_PATH } from "../../api/config";
+import type { ChatMessage, ChatRequestBody, ChatRoundMeta } from "../../api/message";
+import { toChatRequestMessages } from "../../api/message";
+import { generateMessageId } from "../../utils/id";
+import { DEFAULT_MODEL, DEFAULT_USER_ID } from "./types";
 
-export type { ChatRoundMeta };
+export type ChatStreamOutput = Partial<Record<SSEFields, unknown>>;
 
-export type RequestingNotifier = (conversationKey: string, requesting: boolean) => void;
+export type ChatProviderInput = Partial<ChatRequestBody> & {
+  userAction?: "send" | "retry";
+  messages?: XModelMessage[];
+};
+
+let chatXRequest: ReturnType<
+  typeof XRequest<ChatProviderInput, ChatStreamOutput, XModelMessage>
+> | null = null;
+
+function getChatXRequest() {
+  if (!chatXRequest) {
+    chatXRequest = XRequest<ChatProviderInput, ChatStreamOutput, XModelMessage>(
+      CHAT_API_PATH,
+      {
+        manual: true,
+        headers: { Accept: "text/event-stream" },
+      },
+    );
+  }
+  return chatXRequest;
+}
 
 function extractLastUserMessage(messages: ChatMessage[]): ChatMessage | undefined {
   return [...messages].reverse().find((item) => item.role === "user");
@@ -62,20 +84,13 @@ class AppDeepSeekChatProvider extends DeepSeekChatProvider<
   conversationKey: string;
   modelName: string;
   userId: number;
-  private notifier: RequestingNotifier | null;
   private pendingRoundMeta: ChatRoundMeta | null = null;
 
-  constructor(
-    conversationKey: string,
-    modelName: string,
-    userId: number,
-    notifier: RequestingNotifier | null,
-  ) {
+  constructor(conversationKey: string, modelName: string, userId: number) {
     super({ request: getChatXRequest() });
     this.conversationKey = conversationKey;
     this.modelName = modelName;
     this.userId = userId;
-    this.notifier = notifier;
   }
 
   transformParams(
@@ -119,42 +134,13 @@ class AppDeepSeekChatProvider extends DeepSeekChatProvider<
     }
     return result;
   }
-
-  injectRequest(callbacks: {
-    onUpdate: (data: ChatStreamOutput, responseHeaders: Headers) => unknown;
-    onSuccess: (data: ChatStreamOutput[], responseHeaders: Headers) => unknown;
-    onError: (error: Error, errorInfo?: unknown) => unknown;
-  }): void {
-    const notify = (requesting: boolean) => {
-      this.notifier?.(this.conversationKey, requesting);
-    };
-
-    super.injectRequest({
-      onUpdate: (data, responseHeaders) => {
-        notify(true);
-        return callbacks.onUpdate(data, responseHeaders);
-      },
-      onSuccess: (data, responseHeaders) => {
-        notify(false);
-        return callbacks.onSuccess(data, responseHeaders);
-      },
-      onError: (error, errorInfo) => {
-        notify(false);
-        return callbacks.onError(error, errorInfo);
-      },
-    });
-  }
 }
 
 const providerCaches = new Map<string, AppDeepSeekChatProvider>();
 
 export function createDeepSeekChatProvider(
   conversationKey: string,
-  options?: {
-    modelName?: string;
-    userId?: number;
-    notifier?: RequestingNotifier | null;
-  },
+  options?: { modelName?: string; userId?: number },
 ) {
   let provider = providerCaches.get(conversationKey);
   if (!provider) {
@@ -162,7 +148,6 @@ export function createDeepSeekChatProvider(
       conversationKey,
       options?.modelName || DEFAULT_MODEL,
       options?.userId ?? DEFAULT_USER_ID,
-      options?.notifier ?? null,
     );
     providerCaches.set(conversationKey, provider);
   } else if (options?.modelName) {

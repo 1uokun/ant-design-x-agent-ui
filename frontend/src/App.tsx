@@ -1,421 +1,49 @@
-import {
-  AppstoreAddOutlined,
-  CloudUploadOutlined,
-  CommentOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  EllipsisOutlined,
-  FileSearchOutlined,
-  GlobalOutlined,
-  HeartOutlined,
-  PaperClipOutlined,
-  ProductOutlined,
-  QuestionCircleOutlined,
-  ScheduleOutlined,
-  ShareAltOutlined,
-  SmileOutlined,
-  SyncOutlined,
-} from '@ant-design/icons';
-import type { ActionsFeedbackProps, BubbleListProps, ThoughtChainItemProps } from '@ant-design/x';
-import {
-  Actions,
-  Attachments,
-  Bubble,
-  Conversations,
-  Prompts,
-  Sender,
-  Think,
-  ThoughtChain,
-  Welcome,
-} from '@ant-design/x';
-import type { ComponentProps } from '@ant-design/x-markdown';
-import XMarkdown from '@ant-design/x-markdown';
-import { useXChat } from '@ant-design/x-sdk';
-import { Avatar, Button, Flex, Input, Modal, type GetProp, message, Pagination, Space } from 'antd';
-import { createStyles } from 'antd-style';
-import React, { useEffect, useRef, useState } from 'react';
-import '@ant-design/x-markdown/themes/light.css';
-import '@ant-design/x-markdown/themes/dark.css';
-import { BubbleListRef } from '@ant-design/x/es/bubble';
-import { useConversationChat, type AppChatMessage } from './hooks/useConversationChat';
-import { useMarkdownTheme } from "./x-markdown/demo/_utils";
-import locale from "./_utils/local";
+import { message } from "antd";
+import { createStyles } from "antd-style";
+import React, { useRef } from "react";
+import "@ant-design/x-markdown/themes/light.css";
+import "@ant-design/x-markdown/themes/dark.css";
+import { BubbleListRef } from "@ant-design/x/es/bubble";
+import { ChatContext } from "./components/ChatContext";
+import ChatList from "./components/ChatList";
+import ConversationSide from "./components/Conversations";
+import ChatSender from "./components/Sender";
+import { useConversationChat } from "./hooks/useConversationChat";
+import { useMarkdownTheme } from "./hooks/useMarkdownTheme";
 
-// ==================== Style ====================
-const useStyle = createStyles(({ token, css }) => {
-  return {
-    layout: css`
-      width: 100%;
-      height: 100vh;
-      display: flex;
-      background: ${token.colorBgContainer};
-      font-family: AlibabaPuHuiTi, ${token.fontFamily}, sans-serif;
-    `,
-    // side 样式
-    side: css`
-      background: ${token.colorBgLayout}80;
-      width: 280px;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      padding: 0 12px;
-      box-sizing: border-box;
-    `,
-    logo: css`
-      display: flex;
-      align-items: center;
-      justify-content: start;
-      padding: 0 24px;
-      box-sizing: border-box;
-      gap: 8px;
-      margin: 24px 0;
-
-      span {
-        font-weight: bold;
-        color: ${token.colorText};
-        font-size: 16px;
-      }
-    `,
-    conversations: css`
-      overflow-y: auto;
-      margin-top: 12px;
-      padding: 0;
-      flex: 1;
-      .ant-conversations-list {
-        padding-inline-start: 0;
-      }
-    `,
-    sideFooter: css`
-      border-top: 1px solid ${token.colorBorderSecondary};
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    `,
-    // chat list 样式
-    chat: css`
-      height: 100%;
-      width: calc(100% - 280px);
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      .ant-bubble-content-updating {
-        background-image: linear-gradient(90deg, #ff6b23 0%, #af3cb8 31%, #53b6ff 89%);
-        background-size: 100% 2px;
-        background-repeat: no-repeat;
-        background-position: bottom;
-      }
-    `,
-    chatPrompt: css`
-      .ant-prompts-label {
-        color: #000000e0 !important;
-      }
-      .ant-prompts-desc {
-        color: #000000a6 !important;
-        width: 100%;
-      }
-      .ant-prompts-icon {
-        color: #000000a6 !important;
-      }
-    `,
-    chatList: css`
-      flex: 1;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      width: 100%;
-    `,
-    placeholder: css`
-      width: 100%;
-      padding: ${token.paddingLG}px;
-      box-sizing: border-box;
-    `,
-    // sender 样式
-    sender: css`
-      width: 100%;
-      max-width: 840px;
-    `,
-    speechButton: css`
-      font-size: 18px;
-      color: ${token.colorText} !important;
-    `,
-    senderPrompt: css`
-      width: 100%;
-      max-width: 840px;
-      margin: 0 auto;
-      color: ${token.colorText};
-    `,
-  };
-});
-
-// ==================== Static Config ====================
-const HOT_TOPICS = {
-  key: '1',
-  label: locale.hotTopics,
-  children: [
-    {
-      key: '1-1',
-      description: locale.whatComponentsAreInAntDesignX,
-      icon: <span style={{ color: '#f93a4a', fontWeight: 700 }}>1</span>,
-    },
-    {
-      key: '1-2',
-      description: locale.newAgiHybridInterface,
-      icon: <span style={{ color: '#ff6565', fontWeight: 700 }}>2</span>,
-    },
-    {
-      key: '1-3',
-      description: locale.whatComponentsAreInAntDesignX,
-      icon: <span style={{ color: '#ff8f1f', fontWeight: 700 }}>3</span>,
-    },
-    {
-      key: '1-4',
-      description: locale.comeAndDiscoverNewDesignParadigm,
-      icon: <span style={{ color: '#00000040', fontWeight: 700 }}>4</span>,
-    },
-    {
-      key: '1-5',
-      description: locale.howToQuicklyInstallAndImportComponents,
-      icon: <span style={{ color: '#00000040', fontWeight: 700 }}>5</span>,
-    },
-  ],
-};
-
-const DESIGN_GUIDE = {
-  key: '2',
-  label: locale.designGuide,
-  children: [
-    {
-      key: '2-1',
-      icon: <HeartOutlined />,
-      label: locale.intention,
-      description: locale.aiUnderstandsUserNeedsAndProvidesSolutions,
-    },
-    {
-      key: '2-2',
-      icon: <SmileOutlined />,
-      label: locale.role,
-      description: locale.aiPublicPersonAndImage,
-    },
-    {
-      key: '2-3',
-      icon: <CommentOutlined />,
-      label: locale.chat,
-      description: locale.howAICanExpressItselfWayUsersUnderstand,
-    },
-    {
-      key: '2-4',
-      icon: <PaperClipOutlined />,
-      label: locale.interface,
-      description: locale.aiBalances,
-    },
-  ],
-};
-
-const SENDER_PROMPTS: GetProp<typeof Prompts, 'items'> = [
-  {
-    key: '1',
-    description: locale.upgrades,
-    icon: <ScheduleOutlined />,
-  },
-  {
-    key: '2',
-    description: locale.components,
-    icon: <ProductOutlined />,
-  },
-  {
-    key: '3',
-    description: locale.richGuide,
-    icon: <FileSearchOutlined />,
-  },
-  {
-    key: '4',
-    description: locale.installationIntroduction,
-    icon: <AppstoreAddOutlined />,
-  },
-];
-
-const THOUGHT_CHAIN_CONFIG = {
-  loading: {
-    title: locale.modelIsRunning,
-    status: 'loading',
-  },
-  updating: {
-    title: locale.modelIsRunning,
-    status: 'loading',
-  },
-  success: {
-    title: locale.modelExecutionCompleted,
-    status: 'success',
-  },
-  error: {
-    title: locale.executionFailed,
-    status: 'error',
-  },
-  abort: {
-    title: locale.aborted,
-    status: 'abort',
-  },
-};
-
-// ==================== Context ====================
-const ChatContext = React.createContext<{
-  onReload?: ReturnType<typeof useXChat>['onReload'];
-  setMessage?: ReturnType<typeof useXChat<AppChatMessage>>['setMessage'];
-  sessionId?: string;
-  onFeedback?: (messageId: string, feedbackType: 'good' | 'bad') => void;
-}>({});
-
-// ==================== Sub Component ====================
-
-const ThinkComponent = React.memo((props: ComponentProps) => {
-  const [title, setTitle] = React.useState(`${locale.deepThinking}...`);
-  const [loading, setLoading] = React.useState(true);
-
-  React.useEffect(() => {
-    if (props.streamStatus === 'done') {
-      setTitle(locale.completeThinking);
-      setLoading(false);
-    }
-  }, [props.streamStatus]);
-
-  return (
-    <Think title={title} loading={loading}>
-      {props.children}
-    </Think>
-  );
-});
-
-const Footer: React.FC<{
-  id?: string | number;
-  content: string;
-  status?: string;
-  extraInfo?: AppChatMessage['extraInfo'];
-}> = ({ id, content, extraInfo, status }) => {
-  const context = React.useContext(ChatContext);
-  const Items = [
-    {
-      key: 'pagination',
-      actionRender: <Pagination simple total={1} pageSize={1} />,
-    },
-    {
-      key: 'retry',
-      label: locale.retry,
-      icon: <SyncOutlined />,
-      onItemClick: () => {
-        if (id) {
-          context?.onReload?.(id, {
-            userAction: 'retry',
-          });
-        }
-      },
-    },
-    {
-      key: 'copy',
-      actionRender: <Actions.Copy text={content} />,
-    },
-    {
-      key: 'audio',
-      actionRender: (
-        <Actions.Audio
-          onClick={() => {
-            message.info(locale.isMock);
-          }}
-        />
-      ),
-    },
-    {
-      key: 'feedback',
-      actionRender: (
-        <Actions.Feedback
-          styles={{
-            liked: {
-              color: '#f759ab',
-            },
-          }}
-          value={extraInfo?.feedback || 'default'}
-          key="feedback"
-          onChange={(val) => {
-            if (id && val !== 'default') {
-              const messageId = String(id).replace(/-request$/, '');
-              context?.setMessage?.(id, () => ({
-                extraInfo: { feedback: val },
-              }));
-              if (val === 'like' || val === 'dislike') {
-                context?.onFeedback?.(messageId, val === 'like' ? 'good' : 'bad');
-              }
-            }
-          }}
-        />
-      ),
-    },
-  ];
-  return status !== 'updating' && status !== 'loading' ? (
-    <div style={{ display: 'flex' }}>{id && <Actions items={Items} />}</div>
-  ) : null;
-};
-
-const getRole = (className: string): BubbleListProps['role'] => ({
-  assistant: {
-    placement: 'start',
-    header: (_, { status }) => {
-      const config = THOUGHT_CHAIN_CONFIG[status as keyof typeof THOUGHT_CHAIN_CONFIG];
-      return config ? (
-        <ThoughtChain.Item
-          style={{
-            marginBottom: 8,
-          }}
-          status={config.status as ThoughtChainItemProps['status']}
-          variant="solid"
-          icon={<GlobalOutlined />}
-          title={config.title}
-        />
-      ) : null;
-    },
-    footer: (content, { status, key, extraInfo }) => (
-      <Footer
-        content={content}
-        status={status}
-        extraInfo={extraInfo as AppChatMessage['extraInfo']}
-        id={key as string}
-      />
-    ),
-    contentRender: (content: any, { status }) => {
-      const newContent = content.replace(/\n\n/g, '<br/><br/>');
-      return (
-        <XMarkdown
-          paragraphTag="div"
-          components={{
-            think: ThinkComponent,
-          }}
-          className={className}
-          streaming={{
-            hasNextChunk: status === 'updating',
-            enableAnimation: true,
-          }}
-        >
-          {newContent}
-        </XMarkdown>
+const useStyle = createStyles(({ token, css }) => ({
+  layout: css`
+    width: 100%;
+    height: 100vh;
+    display: flex;
+    background: ${token.colorBgContainer};
+    font-family: AlibabaPuHuiTi, ${token.fontFamily}, sans-serif;
+  `,
+  chat: css`
+    height: 100%;
+    width: calc(100% - 280px);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    .ant-bubble-content-updating {
+      background-image: linear-gradient(
+        90deg,
+        #ff6b23 0%,
+        #af3cb8 31%,
+        #53b6ff 89%
       );
-    },
-  },
-  user: { placement: 'end' },
-});
+      background-size: 100% 2px;
+      background-repeat: no-repeat;
+      background-position: bottom;
+    }
+  `,
+}));
 
 const Independent: React.FC = () => {
   const { styles } = useStyle();
   const [className] = useMarkdownTheme();
   const [messageApi, contextHolder] = message.useMessage();
-  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
-  const [attachedFiles, setAttachedFiles] = useState<GetProp<typeof Attachments, 'items'>>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [renameOpen, setRenameOpen] = useState(false);
-  const [renameKey, setRenameKey] = useState('');
-  const [renameValue, setRenameValue] = useState('');
-  const [renameLoading, setRenameLoading] = useState(false);
-
   const listRef = useRef<BubbleListRef>(null);
 
   const {
@@ -435,297 +63,46 @@ const Independent: React.FC = () => {
     handleRenameConversation,
   } = useConversationChat({ messageApi });
 
-  useEffect(() => {
-    if (!activeConversationKey) {
-      setInputValue('');
-    }
-  }, [activeConversationKey]);
-
   const onSubmit = (val: string) => {
     submitChat(val);
-    setInputValue('');
-    listRef.current?.scrollTo({ top: 'bottom' });
+    listRef.current?.scrollTo({ top: "bottom" });
   };
-
-  const handleOpenRename = (key: string, title?: string) => {
-    setRenameKey(key);
-    setRenameValue(String(title || '').replace(`[${locale.curConversation}]`, ''));
-    setRenameOpen(true);
-  };
-
-  const handleConfirmRename = async () => {
-    setRenameLoading(true);
-    try {
-      const ok = await handleRenameConversation(renameKey, renameValue);
-      if (ok) setRenameOpen(false);
-    } finally {
-      setRenameLoading(false);
-    }
-  };
-
-  const confirmDeleteConversation = (key: string) => {
-    Modal.confirm({
-      title: locale.delete,
-      okText: '确定',
-      cancelText: '取消',
-      okButtonProps: { danger: true },
-      onOk: () => handleDeleteConversation(key),
-    });
-  };
-
-  // ==================== Event ====================
-  const chatSide = (
-    <div className={styles.side}>
-      {/* 🌟 Logo */}
-      <div className={styles.logo}>
-        <img
-          src="https://mdn.alipayobjects.com/huamei_iwk9zp/afts/img/A*eco6RrQhxbMAAAAAAAAAAAAADgCCAQ/original"
-          draggable={false}
-          alt="logo"
-          width={24}
-          height={24}
-        />
-        <span>Ant Design X</span>
-      </div>
-      {/* 🌟 会话管理 */}
-      <Conversations
-        creation={{
-          onClick: handleCreateConversation,
-        }}
-        items={conversations.map(({ key, label, ...other }) => ({
-          key,
-          label: key === activeConversationKey ? `[${locale.curConversation}]${label}` : label,
-          ...other,
-        }))}
-        className={styles.conversations}
-        activeKey={activeConversationKey}
-        onActiveChange={selectConversation}
-        groupable
-        styles={{ item: { padding: '0 8px' } }}
-        menu={(conversation) => ({
-          items: [
-            {
-              label: locale.rename,
-              key: 'rename',
-              icon: <EditOutlined />,
-              onClick: () => handleOpenRename(conversation.key, String(conversation.label ?? '')),
-            },
-            {
-              label: locale.delete,
-              key: 'delete',
-              icon: <DeleteOutlined />,
-              danger: true,
-              onClick: () => confirmDeleteConversation(conversation.key),
-            },
-          ],
-        })}
-      />
-
-      <div className={styles.sideFooter}>
-        <Avatar size={24} />
-        <Button type="text" icon={<QuestionCircleOutlined />} />
-      </div>
-    </div>
-  );
-
-  const chatList = (
-    <div className={styles.chatList}>
-      {isDefaultMessagesRequesting ? (
-        <Flex align="center" justify="center" style={{ flex: 1 }}>
-          <span>{locale.noData}</span>
-        </Flex>
-      ) : messages?.length ? (
-        /* 🌟 消息列表 */
-        <Bubble.List
-          ref={listRef}
-          items={messages?.map((i) => ({
-            ...i.message,
-            key: i.id,
-            status: i.status,
-            loading: i.status === 'loading',
-            extraInfo: i.extraInfo,
-          }))}
-          styles={{
-            root: {
-              maxWidth: 940,
-            },
-          }}
-          role={getRole(className)}
-        />
-      ) : (
-        <Flex
-          vertical
-          style={{
-            maxWidth: 840,
-          }}
-          gap={16}
-          align="center"
-          className={styles.placeholder}
-        >
-          <Welcome
-            style={{
-              width: '100%',
-            }}
-            variant="borderless"
-            icon="https://mdn.alipayobjects.com/huamei_iwk9zp/afts/img/A*s5sNRo5LjfQAAAAAAAAAAAAADgCCAQ/fmt.webp"
-            title={locale.welcome}
-            description={locale.welcomeDescription}
-            extra={
-              <Space>
-                <Button icon={<ShareAltOutlined />} />
-                <Button icon={<EllipsisOutlined />} />
-              </Space>
-            }
-          />
-          <Flex
-            gap={16}
-            justify="center"
-            style={{
-              width: '100%',
-            }}
-          >
-            <Prompts
-              items={[HOT_TOPICS]}
-              styles={{
-                list: { height: '100%' },
-                item: {
-                  flex: 1,
-                  backgroundImage: 'linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%)',
-                  borderRadius: 12,
-                  border: 'none',
-                },
-                subItem: { padding: 0, background: 'transparent' },
-              }}
-              onItemClick={(info) => {
-                onSubmit(info.data.description as string);
-              }}
-              className={styles.chatPrompt}
-            />
-
-            <Prompts
-              items={[DESIGN_GUIDE]}
-              styles={{
-                item: {
-                  flex: 1,
-                  backgroundImage: 'linear-gradient(123deg, #e5f4ff 0%, #efe7ff 100%)',
-                  borderRadius: 12,
-                  border: 'none',
-                },
-                subItem: { background: '#ffffffa6' },
-              }}
-              onItemClick={(info) => {
-                onSubmit(info.data.description as string);
-              }}
-              className={styles.chatPrompt}
-            />
-          </Flex>
-        </Flex>
-      )}
-    </div>
-  );
-  const senderHeader = (
-    <Sender.Header
-      title={locale.uploadFile}
-      open={attachmentsOpen}
-      onOpenChange={setAttachmentsOpen}
-      styles={{ content: { padding: 0 } }}
-    >
-      <Attachments
-        beforeUpload={() => false}
-        items={attachedFiles}
-        onChange={(info) => setAttachedFiles(info.fileList)}
-        placeholder={(type) =>
-          type === 'drop'
-            ? { title: locale.dropFileHere }
-            : {
-                icon: <CloudUploadOutlined />,
-                title: locale.uploadFiles,
-                description: locale.clickOrDragFilesToUpload,
-              }
-        }
-      />
-    </Sender.Header>
-  );
-  const chatSender = (
-    <Flex
-      vertical
-      gap={12}
-      align="center"
-      style={{
-        margin: 8,
-      }}
-    >
-      {/* 🌟 提示词 */}
-      {!attachmentsOpen && (
-        <Prompts
-          items={SENDER_PROMPTS}
-          onItemClick={(info) => {
-            onSubmit(info.data.description as string);
-          }}
-          styles={{
-            item: { padding: '6px 12px' },
-          }}
-          className={styles.senderPrompt}
-        />
-      )}
-      {/* 🌟 输入框 */}
-      <Sender
-        value={inputValue}
-        header={senderHeader}
-        onSubmit={() => {
-          onSubmit(inputValue);
-          setInputValue('');
-        }}
-        onChange={setInputValue}
-        onCancel={handleAbort}
-        prefix={
-          <Button
-            type="text"
-            icon={<PaperClipOutlined style={{ fontSize: 18 }} />}
-            onClick={() => setAttachmentsOpen(!attachmentsOpen)}
-          />
-        }
-        loading={isRequesting}
-        className={styles.sender}
-        allowSpeech
-        placeholder={locale.askOrInputUseSkills}
-      />
-    </Flex>
-  );
-
-  // ==================== Render =================
 
   return (
-    <ChatContext.Provider value={{ onReload, setMessage, sessionId: activeConversationKey, onFeedback: handleFeedback }}>
+    <ChatContext.Provider
+      value={{
+        onReload,
+        setMessage,
+        sessionId: activeConversationKey,
+        onFeedback: handleFeedback,
+      }}
+    >
       {contextHolder}
       <div className={styles.layout}>
-        {chatSide}
+        <ConversationSide
+          conversations={conversations}
+          activeConversationKey={activeConversationKey}
+          onSelect={selectConversation}
+          onCreate={handleCreateConversation}
+          onDelete={handleDeleteConversation}
+          onRename={handleRenameConversation}
+        />
         <div className={styles.chat}>
-          {chatList}
-          {chatSender}
+          <ChatList
+            listRef={listRef}
+            isDefaultMessagesRequesting={isDefaultMessagesRequesting}
+            messages={messages}
+            className={className}
+            onSubmit={onSubmit}
+          />
+          <ChatSender
+            activeConversationKey={activeConversationKey}
+            isRequesting={isRequesting}
+            onSubmit={onSubmit}
+            onCancel={handleAbort}
+          />
         </div>
       </div>
-      <Modal
-        title={locale.rename}
-        open={renameOpen}
-        okText="确定"
-        cancelText="取消"
-        confirmLoading={renameLoading}
-        onOk={handleConfirmRename}
-        onCancel={() => setRenameOpen(false)}
-        destroyOnHidden
-      >
-        <Input
-          autoFocus
-          value={renameValue}
-          maxLength={15}
-          placeholder={locale.rename}
-          onChange={(e) => setRenameValue(e.target.value)}
-          onPressEnter={() => {
-            if (!renameLoading) handleConfirmRename();
-          }}
-        />
-      </Modal>
     </ChatContext.Provider>
   );
 };

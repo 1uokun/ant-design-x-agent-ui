@@ -1,4 +1,3 @@
-import type { ActionsFeedbackProps } from "@ant-design/x";
 import { useXChat, useXConversations, type DefaultMessageInfo } from "@ant-design/x-sdk";
 import type { MessageInstance } from "antd/es/message/interface";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -12,38 +11,24 @@ import {
   submitFeedback,
   updateSession,
   type Conversation,
-} from "../api/message";
-import locale from "../_utils/local";
-import { createDeepSeekChatProvider } from "../chat/DeepSeekChatProvider";
-import { DEFAULT_MODEL, DEFAULT_USER_ID } from "../chat/constants";
-import { turnsToChatMessageInfos } from "../chat/history";
+} from "../../api/message";
+import locale from "../../_utils/local";
+import { generateSessionId } from "../../utils/id";
+import {
+  getSessionIdFromPath,
+  syncChatPath,
+} from "../../utils/route";
+import { DEFAULT_MODEL, DEFAULT_USER_ID } from "./types";
 import {
   buildLocalConversation,
   getConversationGroupByTime,
   getConversationGroupSortKey,
   mergeServerAndLocalConversations,
   sessionToConversation,
-} from "../chat/session";
-import { generateSessionId } from "../utils/id";
-import {
-  getSessionIdFromPath,
-  syncChatPath,
-} from "../utils/route";
-
-export type AppChatMessage = {
-  role: string;
-  content: string | { text?: string; imageUrls?: string[] };
-  messageId?: string;
-  requestId?: string;
-  responseId?: string;
-  modelName?: string;
-  requestTime?: string;
-  responseTime?: string;
-  feedbackType?: string;
-  extraInfo?: {
-    feedback?: ActionsFeedbackProps["value"];
-  };
-};
+  turnsToChatMessageInfos,
+} from "./adapters";
+import { createDeepSeekChatProvider } from "./provider";
+import type { AppChatMessage } from "./types";
 
 type UseConversationChatOptions = {
   messageApi: MessageInstance;
