@@ -1,14 +1,19 @@
-<img src="./assets/overview.png" width="100%"/>
+<img src="./assets/screenshot.png" width="100%"/>
 
-# ant-design-x-session-fullstack
+# ant-design-x-agent-ui
 
-基于 [Ant Design X](https://x.ant.design/) 的全栈会话示例，演示如何用 MySQL 设计并实现会话管理、消息持久化与流式对话。
+基于 [Ant Design X](https://x.ant.design/) 的 **全栈（Fullstack）** Agent 对话示例项目。
+
+- 前端：React + `@ant-design/x` + `@ant-design/x-sdk` + `@ant-design/x-markdown`
+- 后端：Cloudflare Workers + D1 + KV（ 或 MySQL + Redis）
+- 能力：会话管理、消息持久化、SSE 流式、重新生成、编辑、反馈
+- **如何运行本项目**： [DEVELOPMENT.md](./DEVELOPMENT.md)
+
+## vibe coding
 
 **AI 代码生成**：可直接复制 [PROMPT.md](./PROMPT.md) 中的提示词给 AI，用于生成完整全栈项目。
 
-**如何运行本项目**： [DEVELOPMENT.md](./DEVELOPMENT.md)。
-
-理论上，只要你掌握了大的框架，后面堆叠功能基本靠vibe coding就可以了。
+理论上，只要你掌握了大的框架（见下文有详细说明），后面堆叠功能基本靠vibe coding就可以了。
 
 ---
 
@@ -223,3 +228,7 @@ SSE 流式生成
     ├─ 4. 写入 agent_content（sourceId = responseId，前端传入）
     └─ 5. 更新 x_message.eventType → complete / abort / error
 ```
+
+## useConversationChat 会话管理
+
+在 useXConversations + useXChat 之上对接后端 API，详见 [useConversationChat/README.md](./frontend/src/hooks/useConversationChat/README.md)
