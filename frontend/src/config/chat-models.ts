@@ -1,3 +1,5 @@
+import locale from "../_utils/local";
+
 export type ChatModelTag = "default" | "new" | "code";
 
 export type ChatModelOption = {
@@ -16,13 +18,13 @@ function inferModelMetadata(modelName: string): Omit<ChatModelOption, "modelName
     ? `DeepSeek ${words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")}`
     : modelName;
 
-  let description = "大语言模型";
+  let description = locale.modelDescriptionDefault;
   if (slug.includes("flash") || slug.includes("lite") || slug.includes("turbo")) {
-    description = "快速响应，适合日常与轻量任务";
+    description = locale.modelDescriptionFast;
   } else if (slug.includes("pro") || slug.includes("max") || slug.includes("reasoner")) {
-    description = "更强推理能力，适合复杂任务";
+    description = locale.modelDescriptionPro;
   } else if (slug.includes("coder") || slug.includes("code")) {
-    description = "适用于代码生成与编程任务";
+    description = locale.modelDescriptionCode;
   }
 
   const tags: ChatModelTag[] = [];

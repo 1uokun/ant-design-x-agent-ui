@@ -8,6 +8,25 @@ export type ListData<T> = {
   list: T[];
 };
 
+export type PageInfo = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+};
+
+export type PageListData<T> = {
+  page: PageInfo;
+  list: T[];
+};
+
+export type ListMessageTurnsOptions = {
+  page?: number;
+  pageSize?: number;
+  order?: "asc" | "desc";
+};
+
 export type ContentItem = {
   type: string;
   text: string;

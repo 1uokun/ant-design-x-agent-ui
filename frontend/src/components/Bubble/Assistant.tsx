@@ -8,6 +8,17 @@ import type { AppChatMessage } from "../../hooks/useConversationChat";
 import { ChatContext } from "../ChatContext";
 import BubbleXMarkdown from "./XMarkdown";
 
+const createAssistantContentRender = (className: string) => {
+  const ContentRender = (content: string, { status }: { status?: string }) => (
+    <BubbleXMarkdown
+      className={className}
+      content={content}
+      status={status}
+    />
+  );
+  return ContentRender;
+};
+
 const THOUGHT_CHAIN_CONFIG = {
   loading: {
     title: locale.modelIsRunning,
@@ -146,11 +157,5 @@ export const getAssistantRole = (
       }
     />
   ),
-  contentRender: (content: string, { status }) => (
-    <BubbleXMarkdown
-      className={className}
-      content={content}
-      status={status}
-    />
-  ),
+  contentRender: createAssistantContentRender(className),
 });

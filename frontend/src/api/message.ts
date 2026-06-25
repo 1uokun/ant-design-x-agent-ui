@@ -17,6 +17,28 @@ export type ListData<T> = {
   list: T[];
 };
 
+/** 分页元信息 */
+export type PageInfo = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+};
+
+/** 分页列表响应 */
+export type PageListData<T> = {
+  page: PageInfo;
+  list: T[];
+};
+
+export type FetchMessageListOptions = {
+  page?: number;
+  pageSize?: number;
+  /** asc：从最早一轮起；desc：从最新一轮起（聊天首屏推荐） */
+  order?: "asc" | "desc";
+};
+
 /** 消息 UI 状态 */
 export type MessageStatus =
   | "local"
@@ -239,15 +261,31 @@ export async function deleteSession(sessionId: string) {
   return res.data;
 }
 
-/** 消息轮次列表 */
-export async function fetchMessageList(sessionId: string) {
-  const res = await requestJson<ListData<MessageTurn>>(
-    `/session/msg/list?sessionId=${encodeURIComponent(sessionId)}`,
+/** 消息轮次列表（支持分页；不传 pageSize 时返回全量） */
+export async function fetchMessageList(
+  sessionId: string,
+  options?: FetchMessageListOptions,
+) {
+  const params = new URLSearchParams({
+    sessionId,
+  });
+  if (options?.page != null) {
+    params.set("page", String(options.page));
+  }
+  if (options?.pageSize != null) {
+    params.set("pageSize", String(options.pageSize));
+  }
+  if (options?.order) {
+    params.set("order", options.order);
+  }
+
+  const res = await requestJson<PageListData<MessageTurn>>(
+    `/session/msg/list?${params.toString()}`,
   );
   if (!res.success || !res.data) {
     throw new Error(res.message ?? "fetchMessageList failed");
   }
-  return res.data.list;
+  return res.data;
 }
 
 /** 单条流式终态（SSE 结束后查一次 eventType） */

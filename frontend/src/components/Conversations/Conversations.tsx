@@ -91,8 +91,6 @@ const ConversationSide: React.FC<ConversationSideProps> = ({
   const confirmDeleteConversation = (key: string) => {
     Modal.confirm({
       title: locale.delete,
-      okText: "确定",
-      cancelText: "取消",
       okButtonProps: { danger: true },
       onOk: () => onDelete(key),
     });
@@ -158,8 +156,6 @@ const ConversationSide: React.FC<ConversationSideProps> = ({
       <Modal
         title={locale.rename}
         open={renameOpen}
-        okText="确定"
-        cancelText="取消"
         confirmLoading={renameLoading}
         onOk={handleConfirmRename}
         onCancel={() => setRenameOpen(false)}

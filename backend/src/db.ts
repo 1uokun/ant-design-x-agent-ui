@@ -10,8 +10,11 @@ import type {
   AgentContentRow,
   ChatRequestBody,
   ContentItem,
+  ListMessageTurnsOptions,
   MessageRow,
   MessageTurnDto,
+  PageInfo,
+  PageListData,
   SessionDto,
   SessionRow,
 } from "./types";
@@ -307,38 +310,107 @@ async function loadContentsBySourceIds(
   return map;
 }
 
+const MAX_MESSAGE_PAGE_SIZE = 100;
+
+function buildPageInfo(
+  page: number,
+  pageSize: number,
+  total: number,
+): PageInfo {
+  const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+  return {
+    page,
+    pageSize,
+    total,
+    totalPages,
+    hasMore: totalPages > 0 && page < totalPages,
+  };
+}
+
+function mapMessageRowsToTurns(
+  db: D1Database,
+  messages: MessageRow[],
+): Promise<MessageTurnDto[]> {
+  const sourceIds = messages.flatMap((m) => [m.requestId, m.responseId]);
+  return loadContentsBySourceIds(db, sourceIds).then((contentMap) =>
+    messages.map((m) => ({
+      sessionId: m.sessionId,
+      messageId: m.messageId,
+      eventType: m.eventType,
+      modelName: m.modelName,
+      requestId: m.requestId,
+      responseId: m.responseId,
+      requestMessages: contentMap.get(m.requestId) ?? [],
+      responseMessages: contentMap.get(m.responseId) ?? [],
+      requestTime: m.requestTime,
+      responseTime: m.responseTime,
+      feedbackType: feedbackToApi(m.feedbackType),
+      createTime: m.createTime,
+      modifyTime: m.modifyTime,
+    })),
+  );
+}
+
 export async function listMessageTurns(
   db: D1Database,
   sessionId: string,
-): Promise<MessageTurnDto[]> {
+  options?: ListMessageTurnsOptions,
+): Promise<PageListData<MessageTurnDto>> {
+  const countRow = await db
+    .prepare(`SELECT COUNT(*) as total FROM x_message WHERE sessionId = ?`)
+    .bind(sessionId)
+    .first<{ total: number }>();
+  const total = countRow?.total ?? 0;
+
+  if (!options?.pageSize) {
+    const { results } = await db
+      .prepare(
+        `SELECT * FROM x_message
+         WHERE sessionId = ?
+         ORDER BY requestTime ASC, id ASC`,
+      )
+      .bind(sessionId)
+      .all<MessageRow>();
+
+    const list = await mapMessageRowsToTurns(db, results ?? []);
+    return {
+      list,
+      page: buildPageInfo(1, total || list.length, total),
+    };
+  }
+
+  const pageSize = Math.min(
+    MAX_MESSAGE_PAGE_SIZE,
+    Math.max(1, Math.floor(options.pageSize)),
+  );
+  const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
+  const page = Math.max(1, Math.floor(options.page ?? 1));
+  const safePage = totalPages === 0 ? 1 : Math.min(page, totalPages);
+  const offset = (safePage - 1) * pageSize;
+  const order = options.order === "desc" ? "desc" : "asc";
+  const orderClause =
+    order === "desc"
+      ? "ORDER BY requestTime DESC, id DESC"
+      : "ORDER BY requestTime ASC, id ASC";
+
   const { results } = await db
     .prepare(
       `SELECT * FROM x_message
        WHERE sessionId = ?
-       ORDER BY requestTime ASC, id ASC`,
+       ${orderClause}
+       LIMIT ? OFFSET ?`,
     )
-    .bind(sessionId)
+    .bind(sessionId, pageSize, offset)
     .all<MessageRow>();
 
-  const messages = results ?? [];
-  const sourceIds = messages.flatMap((m) => [m.requestId, m.responseId]);
-  const contentMap = await loadContentsBySourceIds(db, sourceIds);
+  const rows = results ?? [];
+  const messages = order === "desc" ? [...rows].reverse() : rows;
+  const list = await mapMessageRowsToTurns(db, messages);
 
-  return messages.map((m) => ({
-    sessionId: m.sessionId,
-    messageId: m.messageId,
-    eventType: m.eventType,
-    modelName: m.modelName,
-    requestId: m.requestId,
-    responseId: m.responseId,
-    requestMessages: contentMap.get(m.requestId) ?? [],
-    responseMessages: contentMap.get(m.responseId) ?? [],
-    requestTime: m.requestTime,
-    responseTime: m.responseTime,
-    feedbackType: feedbackToApi(m.feedbackType),
-    createTime: m.createTime,
-    modifyTime: m.modifyTime,
-  }));
+  return {
+    list,
+    page: buildPageInfo(safePage, pageSize, total),
+  };
 }
 
 export async function prepareChat(
@@ -402,7 +474,7 @@ export async function buildChatHistory(
   sessionId: string,
   currentRequestId: string,
 ): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
-  const turns = await listMessageTurns(db, sessionId);
+  const { list: turns } = await listMessageTurns(db, sessionId);
   const history: Array<{ role: "user" | "assistant"; content: string }> = [];
 
   for (const turn of turns) {

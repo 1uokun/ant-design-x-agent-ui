@@ -1,4 +1,5 @@
 import dayjs from "dayjs";
+import locale from "../../_utils/local";
 import {
   EventType,
   type ChatMessageInfo,
@@ -13,22 +14,22 @@ import {
 // --- 会话列表：后端 Session ↔ 侧边栏 Conversation ---
 
 export const getConversationGroupByTime = (time?: string): string => {
-  if (!time || time.startsWith("1970")) return "更早";
+  if (!time || time.startsWith("1970")) return locale.earlier;
   const date = dayjs(time);
-  if (!date.isValid()) return "更早";
+  if (!date.isValid()) return locale.earlier;
 
   const daysAgo = dayjs().startOf("day").diff(date.startOf("day"), "day");
-  if (daysAgo <= 0) return "今天";
-  if (daysAgo === 1) return "昨天";
-  if (daysAgo >= 5) return "更早";
+  if (daysAgo <= 0) return locale.today;
+  if (daysAgo === 1) return locale.yesterday;
+  if (daysAgo >= 5) return locale.earlier;
   return date.format("YYYY-MM-DD");
 };
 
 export const getConversationGroupSortKey = (group: string): number => {
-  if (group === "置顶") return -1;
-  if (group === "今天") return 0;
-  if (group === "昨天") return 1;
-  if (group === "更早") return Number.MAX_SAFE_INTEGER;
+  if (group === locale.pinned) return -1;
+  if (group === locale.today) return 0;
+  if (group === locale.yesterday) return 1;
+  if (group === locale.earlier) return Number.MAX_SAFE_INTEGER;
   const date = dayjs(group, "YYYY-MM-DD", true);
   if (date.isValid()) {
     return dayjs().startOf("day").diff(date.startOf("day"), "day");
@@ -39,8 +40,8 @@ export const getConversationGroupSortKey = (group: string): number => {
 export function sessionToConversation(session: Session): Conversation {
   return {
     key: session.sessionId,
-    label: session.title || `会话 ${session.sessionId.slice(0, 8)}`,
-    group: session.pinned ? "置顶" : getConversationGroupByTime(session.lastMessageTime),
+    label: session.title || `${locale.session} ${session.sessionId.slice(0, 8)}`,
+    group: session.pinned ? locale.pinned : getConversationGroupByTime(session.lastMessageTime),
     pinned: session.pinned,
     lastMessageTime: session.lastMessageTime,
   };
@@ -50,8 +51,8 @@ export function buildLocalConversation(sessionId: string, text: string): Convers
   const now = new Date().toISOString();
   return {
     key: sessionId,
-    label: text.trim().slice(0, 15) || "新对话",
-    group: "今天",
+    label: text.trim().slice(0, 15) || locale.newConversation,
+    group: locale.today,
     lastMessageTime: now,
   };
 }
@@ -122,6 +123,19 @@ export function assistantStatusFromStreamBuffer(
     return text ? "updating" : "loading";
   }
   return eventTypeToStatus(eventType);
+}
+
+export function prependChatMessageInfos<T extends { id?: string | number }>(
+  existing: T[],
+  older: T[],
+): T[] {
+  if (older.length === 0) return existing;
+  const existingIds = new Set(existing.map((item) => item.id));
+  const toPrepend = older.filter(
+    (item) => item.id != null && !existingIds.has(item.id),
+  );
+  if (toPrepend.length === 0) return existing;
+  return [...toPrepend, ...existing];
 }
 
 export function turnsToChatMessageInfos(turns: MessageTurn[]): ChatMessageInfo[] {

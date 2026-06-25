@@ -40,6 +40,19 @@ type ChatMessageListItem = {
   message: AppChatMessage;
 };
 
+/** 从消息列表中找到第一条用户消息的 bubble id */
+export const findFirstUserMessageKey = (
+  messages: ChatMessageListItem[] | undefined,
+): string | number | null => {
+  if (!messages?.length) return null;
+  for (const item of messages) {
+    if (item.message.role === "user" && item.id != null) {
+      return item.id;
+    }
+  }
+  return null;
+};
+
 /** 从消息列表中找到最后一条用户消息的 bubble id（兼容 msg_* 与 *-request） */
 export const findLastUserMessageKey = (
   messages: ChatMessageListItem[] | undefined,
@@ -208,10 +221,13 @@ const UserBubbleContent: React.FC<{
   content: UserContent;
   id?: string | number;
   extraInfo?: AppChatMessage["extraInfo"];
-}> = ({ content, id, extraInfo }) => {
+  /** 非空时表示本条为历史锚点，在滚动容器内可见时加载更早消息 */
+  historyAnchorRoot?: HTMLElement | null;
+}> = ({ content, id, extraInfo, historyAnchorRoot }) => {
   const { styles, cx } = useContentStyle();
   const context = React.useContext(ChatContext);
   const measureRef = React.useRef<HTMLDivElement>(null);
+  const anchorRef = React.useRef<HTMLDivElement>(null);
   const text = getUserText(content);
   const canCollapse = extraInfo?.userCanCollapse ?? false;
   const collapsed = extraInfo?.userCollapsed ?? false;
@@ -234,8 +250,25 @@ const UserBubbleContent: React.FC<{
     }));
   }, [text, id, context, extraInfo?.userCanCollapse, editing]);
 
+  React.useEffect(() => {
+    if (!historyAnchorRoot) return;
+    const el = anchorRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) context?.loadMoreHistory?.();
+      },
+      { root: historyAnchorRoot, threshold: 0 },
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [historyAnchorRoot, context?.loadMoreHistory]);
+
   return (
     <div
+      ref={anchorRef}
       className={cx(
         styles.contentWrap,
         canCollapse && collapsed && !editing && styles.contentCollapsed,
@@ -265,8 +298,10 @@ const UserBubbleContent: React.FC<{
 };
 
 export type CreateUserRoleOptions = {
+  firstUserMessageKey: string | number | null;
   lastUserMessageKey: string | number | null;
   isLastRoundComplete: boolean;
+  scrollRoot?: HTMLElement | null;
   onEditUserMessage?: (messageKey: string | number, content: string) => void;
   onCancelUserMessageEdit?: (messageKey: string | number) => void;
 };
@@ -321,6 +356,13 @@ export const createUserRole = (
           content={content as UserContent}
           id={key}
           extraInfo={extraInfo as AppChatMessage["extraInfo"]}
+          historyAnchorRoot={
+            key != null &&
+            options.firstUserMessageKey != null &&
+            String(key) === String(options.firstUserMessageKey)
+              ? options.scrollRoot ?? null
+              : undefined
+          }
         />
       ),
       footer: (content, { key, extraInfo, status }) => (

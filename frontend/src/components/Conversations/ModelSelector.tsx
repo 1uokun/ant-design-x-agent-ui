@@ -8,6 +8,7 @@ import {
   type ChatModelOption,
   type ChatModelTag,
 } from "../../config/chat-models";
+import locale from "../../_utils/local";
 import SidebarToggle from "./SidebarToggle";
 
 const useStyle = createStyles(({ css }) => ({
@@ -34,9 +35,9 @@ const useStyle = createStyles(({ css }) => ({
 }));
 
 const TAG_LABEL: Record<ChatModelTag, string> = {
-  default: "默认",
-  new: "新模型",
-  code: "代码",
+  default: locale.modelTagDefault,
+  new: locale.modelTagNew,
+  code: locale.modelTagCode,
 };
 
 const TAG_COLOR: Record<ChatModelTag, string> = {

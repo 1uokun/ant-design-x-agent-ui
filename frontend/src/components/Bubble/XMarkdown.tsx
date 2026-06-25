@@ -8,13 +8,16 @@ import "./styles/markdown-pc-special-class.css";
 
 const MARKDOWN_PC_CLASS = "markdown-pc-special-class";
 
-const Code: React.FC<ComponentProps> = (props) => {
+/** 超过该长度时关闭块级淡入动画，避免大段 Markdown 流式输出卡顿 */
+const ANIMATION_CONTENT_MAX = 8_000;
+
+const Code: React.FC<ComponentProps> = React.memo((props) => {
   const { className, children } = props;
   const lang = className?.match(/language-(\w+)/)?.[1] || "";
 
   if (typeof children !== "string") return null;
   return <CodeHighlighter lang={lang}>{children}</CodeHighlighter>;
-};
+});
 
 const ThinkComponent = React.memo((props: ComponentProps) => {
   const [title, setTitle] = React.useState(`${locale.deepThinking}...`);
@@ -34,6 +37,11 @@ const ThinkComponent = React.memo((props: ComponentProps) => {
   );
 });
 
+const MARKDOWN_COMPONENTS = {
+  think: ThinkComponent,
+  code: Code,
+};
+
 export type BubbleXMarkdownProps = {
   className: string;
   content: string;
@@ -45,19 +53,30 @@ const BubbleXMarkdown: React.FC<BubbleXMarkdownProps> = ({
   content,
   status,
 }) => {
+  const isStreaming = status === "updating";
+  const enableAnimation =
+    isStreaming && content.length <= ANIMATION_CONTENT_MAX;
+
+  const streaming = React.useMemo(
+    () => ({
+      hasNextChunk: isStreaming,
+      enableAnimation,
+    }),
+    [isStreaming, enableAnimation],
+  );
+
+  const mergedClassName = React.useMemo(
+    () => `${className} ${MARKDOWN_PC_CLASS}`,
+    [className],
+  );
+
   return (
-    <div style={{ width: "100%" }}>
+    <div className="bubble-x-markdown" style={{ width: "100%" }}>
       <AntXMarkdown
         paragraphTag="div"
-        components={{
-          think: ThinkComponent,
-          code: Code,
-        }}
-        className={`${className} ${MARKDOWN_PC_CLASS}`}
-        streaming={{
-          hasNextChunk: status === "updating",
-          enableAnimation: true,
-        }}
+        components={MARKDOWN_COMPONENTS}
+        className={mergedClassName}
+        streaming={streaming}
       >
         {content}
       </AntXMarkdown>
@@ -65,4 +84,15 @@ const BubbleXMarkdown: React.FC<BubbleXMarkdownProps> = ({
   );
 };
 
-export default BubbleXMarkdown;
+function propsAreEqual(
+  prev: BubbleXMarkdownProps,
+  next: BubbleXMarkdownProps,
+): boolean {
+  return (
+    prev.content === next.content &&
+    prev.status === next.status &&
+    prev.className === next.className
+  );
+}
+
+export default React.memo(BubbleXMarkdown, propsAreEqual);

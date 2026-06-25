@@ -1,4 +1,4 @@
-import { useXChat, useXConversations, type DefaultMessageInfo } from "@ant-design/x-sdk";
+import { useXChat, useXConversations } from "@ant-design/x-sdk";
 import type { MessageInstance } from "antd/es/message/interface";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -8,7 +8,6 @@ import {
   deleteMessage,
   deleteSession,
   fetchAvailableModelIds,
-  fetchMessageList,
   fetchSessionList,
   fetchStreamBuffer,
   submitFeedback,
@@ -38,23 +37,16 @@ import {
   mergeServerAndLocalConversations,
   sessionToConversation,
   assistantStatusFromStreamBuffer,
-  turnsToChatMessageInfos,
 } from "./adapters";
 import { createDeepSeekChatProvider, type ChatProviderInput } from "./provider";
 import { subscribeStreamBuffer } from "./subscribeStreamBuffer";
+import { appendHistoryPage, fetchFirstHistoryPage } from "./historyPagination";
 import { syncChatModelName } from "./model-sync";
 import type { AppChatMessage } from "./types";
 
 type UseConversationChatOptions = {
   messageApi: MessageInstance;
 };
-
-function findConversationBySessionId(
-  list: Conversation[],
-  sessionId: string,
-): Conversation | undefined {
-  return list.find((item) => item.key === sessionId);
-}
 
 export function useConversationChat({ messageApi }: UseConversationChatOptions) {
   const routeSessionIdRef = useRef(getSessionIdFromPath());
@@ -200,28 +192,15 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
         setConversations(
           mergeServerAndLocalConversations(list, localConversationsRef.current),
         );
-
-        const routeSessionId = routeSessionIdRef.current;
-        if (routeSessionId && !findConversationBySessionId(list, routeSessionId)) {
-          try {
-            await fetchMessageList(routeSessionId);
-          } catch {
-            if (!cancelled) {
-              messageApi.error("会话不存在或已删除");
-              routeSessionIdRef.current = null;
-              setActiveConversationKey("");
-            }
-          }
-        }
       } catch {
-        if (!cancelled) messageApi.error("加载会话列表失败");
+        if (!cancelled) messageApi.error(locale.loadSessionListFailed);
       }
     };
     load();
     return () => {
       cancelled = true;
     };
-  }, [messageApi, setConversations, setActiveConversationKey]);
+  }, [messageApi, setConversations]);
 
   const upsertLocalConversation = useCallback(
     (conversation: Conversation) => {
@@ -244,7 +223,7 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
         label: current.label || "",
         ...patch,
         lastMessageTime,
-        group: current.pinned ? "置顶" : getConversationGroupByTime(lastMessageTime),
+        group: current.pinned ? locale.pinned : getConversationGroupByTime(lastMessageTime),
       });
     },
     [setConversation],
@@ -252,6 +231,9 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
 
   const chatConversationKey =
     activeConversationKey || routeSessionIdRef.current || draftChatKey;
+
+  const isLocalSession = (sessionId: string) =>
+    localConversationsRef.current.some((item) => item.key === sessionId);
 
   useEffect(() => {
     createDeepSeekChatProvider(chatConversationKey, {
@@ -270,6 +252,7 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
     queueRequest,
     onReload: reloadMessage,
     setMessage,
+    setMessages,
     removeMessage,
   } = useXChat<AppChatMessage>({
     provider: createDeepSeekChatProvider(chatConversationKey, {
@@ -289,10 +272,9 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
         return [];
       }
       try {
-        const turns = await fetchMessageList(conversationKey);
-        return turnsToChatMessageInfos(turns) as DefaultMessageInfo<AppChatMessage>[];
+        return await fetchFirstHistoryPage(conversationKey);
       } catch {
-        messageApi.error("加载历史消息失败");
+        messageApi.error(locale.loadHistoryFailed);
         return [];
       }
     },
@@ -315,6 +297,13 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  const loadMoreHistory = useCallback(() => {
+    if (!chatConversationKey || isLocalSession(chatConversationKey)) return;
+    appendHistoryPage(chatConversationKey, setMessages, () =>
+      messageApi.error(locale.loadMoreHistoryFailed),
+    );
+  }, [chatConversationKey, messageApi, setMessages]);
 
   const serverStreamingMessageId = useMemo(() => {
     if (isRequesting) return null;
@@ -393,12 +382,12 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
     ) => {
       const msgInfo = messages.find((item) => item.id === id);
       if (!msgInfo) {
-        messageApi.error("未找到消息");
+        messageApi.error(locale.messageNotFound);
         return;
       }
       const { messageId, requestId, responseId, modelName: msgModelName } = msgInfo.message;
       if (!messageId || !requestId || !responseId) {
-        messageApi.error("重新生成缺少消息标识");
+        messageApi.error(locale.regenerateMissingId);
         return;
       }
       reloadMessage(
@@ -423,7 +412,7 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
       try {
         await submitFeedback({ sessionId: activeConversationKey, messageId, feedbackType });
       } catch {
-        messageApi.error("提交反馈失败");
+        messageApi.error(locale.submitFeedbackFailed);
       }
     },
     [activeConversationKey, messageApi],
@@ -438,7 +427,7 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
       try {
         await abortChat({ sessionId: activeConversationKey, messageId });
       } catch {
-        messageApi.error("停止生成失败");
+        messageApi.error(locale.stopGenerationFailed);
       }
     }
     abort();
@@ -498,7 +487,7 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
             setActiveConversationKey(remaining[0]?.key || "");
           }
         } catch {
-          messageApi.error("删除会话失败");
+          messageApi.error(locale.deleteSessionFailed);
           throw new Error("delete failed");
         }
       })();
@@ -510,7 +499,7 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
     async (key: string, title: string) => {
       const nextTitle = title.trim().slice(0, 15);
       if (!nextTitle) {
-        messageApi.error("请输入会话名称");
+        messageApi.error(locale.enterSessionName);
         return false;
       }
       try {
@@ -521,7 +510,7 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
         }
         return true;
       } catch {
-        messageApi.error("重命名失败");
+        messageApi.error(locale.renameFailed);
         return false;
       }
     },
@@ -538,7 +527,7 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
             ...current,
             pinned,
             group: pinned
-              ? "置顶"
+              ? locale.pinned
               : getConversationGroupByTime(current.lastMessageTime),
           });
         }
@@ -634,6 +623,7 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
     messages,
     isRequesting,
     isDefaultMessagesRequesting,
+    loadMoreHistory,
     modelKey,
     modelName,
     chatModels,
