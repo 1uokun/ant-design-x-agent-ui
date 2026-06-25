@@ -9,7 +9,10 @@ import {
   updateFeedback,
   updateSession,
 } from "./db";
+import { EventType } from "./constants";
 import { handleChatAbort, handleChatStream } from "./services/chat";
+import { processChatStreamQueueMessage } from "./services/streamRunner";
+import { readAll } from "./services/streamBuffer";
 import type {
   AbortBody,
   ChatRequestBody,
@@ -64,6 +67,13 @@ app.get("/api/v1/session/msg/list", async (c) => {
   if (!sessionId) return jsonError("sessionId 不能为空");
 
   const list = await listMessageTurns(c.env.DB, sessionId);
+  for (const turn of list) {
+    if (turn.eventType !== EventType.STREAMING) continue;
+    const partial = await readAll(c.env.STREAM_KV, sessionId, turn.messageId);
+    if (partial) {
+      turn.responseMessages = [{ type: "text/plain", text: partial }];
+    }
+  }
   return jsonOk({ list });
 });
 
@@ -119,4 +129,17 @@ app.post("/api/v1/chat", async (c) => {
 
 app.get("/health", (c) => c.json({ ok: true }));
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async queue(batch: MessageBatch<ChatRequestBody>, env: Env): Promise<void> {
+    for (const message of batch.messages) {
+      try {
+        await processChatStreamQueueMessage(env, message.body);
+        message.ack();
+      } catch (err) {
+        console.error("[chat-stream queue] failed:", err);
+        message.retry();
+      }
+    }
+  },
+};

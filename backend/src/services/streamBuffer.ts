@@ -1,6 +1,7 @@
 import {
   FINALIZE_LOCK_TTL_SECONDS,
   STREAM_TTL_SECONDS,
+  abortKey,
   finalizeLockKey,
   streamKey,
 } from "../constants";
@@ -63,7 +64,10 @@ export async function cleanup(
   messageId: string,
 ): Promise<void> {
   if (!sessionId || !messageId) return;
-  await kv.delete(streamKey(sessionId, messageId));
+  await Promise.all([
+    kv.delete(streamKey(sessionId, messageId)),
+    kv.delete(abortKey(sessionId, messageId)),
+  ]);
 }
 
 /** 对齐 Java StreamBufferService.tryAcquireFinalizeLock：SETNX 幂等锁 */

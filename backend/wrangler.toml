@@ -17,5 +17,14 @@ migrations_dir = "db/migrations"
 binding = "STREAM_KV"
 id = "5cb69b54c84b4c369495e2718c69c360"
 
+[[queues.producers]]
+binding = "CHAT_QUEUE"
+queue = "chat-stream"
+
+[[queues.consumers]]
+queue = "chat-stream"
+max_batch_size = 1
+max_batch_timeout = 1
+
 [dev]
 port = 8787

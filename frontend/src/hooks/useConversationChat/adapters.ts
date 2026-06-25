@@ -139,6 +139,17 @@ export function turnsToChatMessageInfos(turns: MessageTurn[]): ChatMessageInfo[]
     }
 
     if (turn.eventType === EventType.STREAMING) {
+      const responseText = itemsToText(turn.responseMessages);
+      messages.push({
+        id: turn.messageId,
+        status: responseText ? "updating" : "loading",
+        message: {
+          role: "assistant",
+          content: responseText,
+          responseTime: turn.responseTime,
+          ...roundMeta,
+        },
+      });
       return messages;
     }
 

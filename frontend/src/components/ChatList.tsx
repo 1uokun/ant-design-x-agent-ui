@@ -127,6 +127,7 @@ const ChatList: React.FC<ChatListProps> = ({
               key: i.id!,
               status: i.status,
               loading: i.status === "loading",
+              streaming: i.status === "updating",
               extraInfo: {
                 ...i.extraInfo,
                 feedback:

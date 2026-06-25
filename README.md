@@ -220,7 +220,9 @@ x_message (单轮对话 = 一问一答)
     ▼
 SSE 流式生成
     │
-    ├─ token 缓冲（Redis / 内存）
+    ├─ 上游 token 实时写入 KV 缓冲（stream:{sessionId}:{messageId}）
+    ├─ SSE 从 KV 缓冲读取并推送给前端
+    ├─ 刷新等断连不中断写 KV；主动 abort 才停止生成
     │
     ▼
 生成结束 / 用户停止 / 出错

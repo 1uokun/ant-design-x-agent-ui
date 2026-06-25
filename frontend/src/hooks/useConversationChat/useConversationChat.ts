@@ -7,6 +7,7 @@ import {
   createChatRoundMeta,
   deleteMessage,
   deleteSession,
+  EventType,
   fetchMessageList,
   fetchSessionList,
   submitFeedback,
@@ -221,6 +222,7 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
     queueRequest,
     onReload: reloadMessage,
     setMessage,
+    setMessages,
     removeMessage,
   } = useXChat<AppChatMessage>({
     provider: createDeepSeekChatProvider(chatConversationKey, {
@@ -261,6 +263,45 @@ export function useConversationChat({ messageApi }: UseConversationChatOptions) 
       };
     },
   });
+
+  const hasServerSideStreaming = useMemo(
+    () =>
+      !isRequesting &&
+      messages.some(
+        (item) =>
+          item.message.role === "assistant" &&
+          (item.status === "loading" || item.status === "updating"),
+      ),
+    [isRequesting, messages],
+  );
+
+  useEffect(() => {
+    if (!activeConversationKey || !hasServerSideStreaming) return;
+
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const turns = await fetchMessageList(activeConversationKey);
+        if (cancelled) return;
+        setMessages(
+          turnsToChatMessageInfos(turns) as DefaultMessageInfo<AppChatMessage>[] as never,
+        );
+        const stillStreaming = turns.some((turn) => turn.eventType === EventType.STREAMING);
+        if (!stillStreaming) return;
+      } catch {
+        // 轮询失败时静默重试
+      }
+      if (!cancelled) {
+        window.setTimeout(poll, 2000);
+      }
+    };
+
+    poll();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeConversationKey, hasServerSideStreaming, setMessages]);
 
   const handleReload = useCallback(
     (

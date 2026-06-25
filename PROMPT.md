@@ -1,12 +1,12 @@
 # AI 全栈代码生成提示词
 
-> 将下方「--- 提示词开始 ---」到「--- 提示词结束 ---」之间的内容完整复制给 AI（Cursor / Claude / ChatGPT 等），用于生成 `ant-design-x-session-fullstack` 全栈项目。
+> 将下方「--- 提示词开始 ---」到「--- 提示词结束 ---」之间的内容完整复制给 AI（Cursor / Claude / ChatGPT 等），用于生成 `ant-design-x-agent-ui` 全栈项目。
 
 ---
 
 ## --- 提示词开始 ---
 
-你是一个资深全栈工程师。请根据以下规格，从零实现一个可运行的开源项目 **ant-design-x-session-fullstack**。
+你是一个资深全栈工程师。请根据以下规格，从零实现一个可运行的开源项目 **ant-design-x-agent-ui**。
 
 ## 项目目标
 
@@ -33,7 +33,7 @@
 ## 项目结构
 
 ```
-ant-design-x-session-fullstack/
+ant-design-x-agent-ui/
 ├── frontend/
 │   ├── src/
 │   │   ├── pages/Chat/           # 主聊天页
@@ -149,11 +149,11 @@ Base path: `/api/v1`
 
 ### API 概览
 
-| 功能     | 方法 | 路径                          |
-| -------- | ---- | ----------------------------- |
-| 会话列表 | GET  | `/api/v1/session/page/list`   |
-| 消息列表 | GET  | `/api/v1/session/msg/list`    |
-| 流式对话 | POST | `/api/v1/chat`                |
+| 功能     | 方法 | 路径                        |
+| -------- | ---- | --------------------------- |
+| 会话列表 | GET  | `/api/v1/session/page/list` |
+| 消息列表 | GET  | `/api/v1/session/msg/list`  |
+| 流式对话 | POST | `/api/v1/chat`              |
 
 统一响应外壳（非 SSE 接口）：
 
@@ -381,18 +381,18 @@ data: 错误描述
    - 禁止后端 UUID.randomUUID() 生成业务 ID
 ```
 
-### 3.2 streamForward（异步线程）
+### 3.2 streamForward（异步，与 SSE 解耦）
 
 ```
-1. 调用大模型 stream API
-2. 每收到 delta:
-   - append 到本地 StringBuilder
-   - RPUSH 到 Redis LIST（key: stream:{sessionId}:{messageId}）
-   - emitter.send SSE 给前端
-3. emitter.send 若 IOException（客户端断连）→ 捕获并继续读上游，不要中断
-4. 收到 [DONE] → finalize(COMPLETE)
-5. 轮询 Redis abort 标记（每 200ms）→ 若存在则关闭上游 InputStream → finalize(ABORT)
+1. prepareChat 同步完成后，将本轮请求投递到异步 Worker（Java 异步线程 / Cloudflare Queue 消费者）
+2. 异步 Worker 调用大模型 stream API，与 HTTP SSE 连接生命周期无关
+3. 每收到 delta → append 本地 buffer + 写入 KV/Redis（key: stream:{sessionId}:{messageId}）
+4. HTTP 响应侧轮询 KV/Redis 缓冲推送 SSE（客户端断连只停推送，不中断异步 Worker）
+5. 收到 [DONE] → finalize(COMPLETE)
+6. 轮询 abort 标记（每 200ms）→ 仅用户主动停止时关闭上游 → finalize(ABORT)
 ```
+
+**禁止**把上游读取绑在 SSE 连接或 `onCompletion`/`onError` 上，否则刷新页面会导致 eventType 卡在 0。
 
 ### 3.3 finalize（幂等，只执行一次）
 
@@ -408,11 +408,11 @@ data: 错误描述
 
 ### 3.4 客户端断连 vs 主动停止（关键区别）
 
-| 场景          | 前端行为                           | 后端行为                                                   |
-| ------------- | ---------------------------------- | ---------------------------------------------------------- |
-| 刷新页面      | 仅断开 SSE                         | **继续**读上游，finalize(COMPLETE)，完整落库               |
+| 场景          | 前端行为                               | 后端行为                                                   |
+| ------------- | -------------------------------------- | ---------------------------------------------------------- |
+| 刷新页面      | 仅断开 SSE                             | **继续**读上游，finalize(COMPLETE)，完整落库               |
 | 点击停止      | 先 POST /api/v1/chat/abort，再断开 SSE | 检测 abort 标记，停止上游，finalize(ABORT)，保存已生成部分 |
-| SSE 超时 120s | -                                  | finalize(ABORT)                                            |
+| SSE 超时 120s | -                                      | finalize(ABORT)                                            |
 
 **禁止**在 `emitter.onCompletion` / `onError` 中直接 finalize(ABORT)，否则刷新页面会导致 eventType 卡在 0 或错误 abort。
 
@@ -423,6 +423,8 @@ stream:{sessionId}:{messageId}        # LIST, token 缓冲, TTL 30min
 finalize-lock:{sessionId}:{messageId} # SETNX 锁, TTL 30s
 abort:{sessionId}:{messageId}         # 主动停止标记, TTL 30min
 ```
+
+**Cloudflare Workers 落地**：`STREAM_KV` 对应 Redis 缓冲；`CHAT_QUEUE`（`chat-stream`）对应异步线程；`streamRunner` 读上游写 KV，`pollingSse` 轮询 KV 推 SSE。首次部署需 `wrangler queues create chat-stream`。
 
 ---
 
@@ -495,9 +497,9 @@ async function sendMessage(text: string) {
 
 ### 4.4 刷新页面恢复
 
-进入会话时 `GET /api/v1/session/msg/list?sessionId={id}`：
+进入会话时 `GET /api/v1/session/msg/list?sessionId={id}`，并对仍在生成的轮次每 2s 轮询一次：
 
-- `eventType === 0` → 显示 loading（极少见，生成中断）
+- `eventType === 0` → 显示 loading / 流式更新（`msg/list` 附带 KV 中已生成片段）
 - `eventType === 1` → 显示完整回答
 - `eventType === 2` → 显示已生成部分 +「已停止」
 - `eventType === 3` → 显示错误 + 重试按钮
